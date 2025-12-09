@@ -4,6 +4,8 @@ const KEYS = {
   USER: 'chrono_user',
   RECORDS: 'chrono_records',
   SESSION: 'chrono_current_session',
+  THEME: 'chrono_theme_pref',
+  DARK_MODE: 'chrono_dark_mode',
 };
 
 export const storageService = {
@@ -43,6 +45,22 @@ export const storageService = {
     } else {
       localStorage.removeItem(KEYS.SESSION);
     }
+  },
+
+  getTheme: (): string => {
+    return localStorage.getItem(KEYS.THEME) || 'indigo';
+  },
+
+  saveTheme: (theme: string) => {
+    localStorage.setItem(KEYS.THEME, theme);
+  },
+
+  getDarkMode: (): boolean => {
+    return localStorage.getItem(KEYS.DARK_MODE) === 'true';
+  },
+
+  saveDarkMode: (isDark: boolean) => {
+    localStorage.setItem(KEYS.DARK_MODE, String(isDark));
   },
 
   // Helper to clear data for testing

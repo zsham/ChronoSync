@@ -6,6 +6,8 @@ export interface User {
   department: string;
   position: string;
   avatarUrl?: string;
+  themeColor?: string;
+  isDarkMode?: boolean;
 }
 
 export interface AttendanceRecord {
