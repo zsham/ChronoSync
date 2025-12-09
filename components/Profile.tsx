@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { User } from '../types';
 import { storageService } from '../services/storageService';
 import { DEPARTMENTS } from '../constants';
-import { User as UserIcon, Mail, Phone, Briefcase, Camera, Save, CheckCircle, X } from 'lucide-react';
+import { User as UserIcon, Mail, Phone, Briefcase, Camera, Save, CheckCircle, Upload } from 'lucide-react';
 
 interface ProfileProps {
   user: User;
@@ -13,10 +13,28 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUpdate }) => {
   const [formData, setFormData] = useState<User>(user);
   const [isEditing, setIsEditing] = useState(false);
   const [message, setMessage] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        alert("File size is too large. Please select an image under 5MB.");
+        return;
+      }
+      
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const result = reader.result as string;
+        setFormData(prev => ({ ...prev, avatarUrl: result }));
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -43,17 +61,35 @@ export const Profile: React.FC<ProfileProps> = ({ user, onUpdate }) => {
         
         <div className="px-8 pb-10">
            <div className="relative flex flex-col md:flex-row justify-between items-end -mt-14 mb-8 gap-4">
-              <div className="relative group cursor-pointer">
-                <div className="w-28 h-28 rounded-2xl border-[6px] border-white bg-white shadow-lg overflow-hidden relative">
+              <div 
+                className={`relative group ${isEditing ? 'cursor-pointer' : ''}`}
+                onClick={() => isEditing && fileInputRef.current?.click()}
+                title={isEditing ? "Click to upload photo" : ""}
+              >
+                <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    className="hidden" 
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                />
+                <div className={`w-28 h-28 rounded-2xl border-[6px] border-white bg-white shadow-lg overflow-hidden relative transition-all ${isEditing ? 'ring-4 ring-indigo-100' : ''}`}>
                     <img 
                         src={formData.avatarUrl || `https://ui-avatars.com/api/?name=${formData.name}&background=random`} 
                         alt="Profile" 
                         className="w-full h-full object-cover"
                     />
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Camera className="text-white" size={24} />
-                    </div>
+                    {isEditing && (
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Camera className="text-white" size={24} />
+                        </div>
+                    )}
                 </div>
+                {isEditing && (
+                    <div className="absolute -bottom-2 -right-2 bg-indigo-600 text-white p-1.5 rounded-lg shadow-sm z-10 border-2 border-white">
+                        <Upload size={14} />
+                    </div>
+                )}
               </div>
               
               {!isEditing ? (
