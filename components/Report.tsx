@@ -1,0 +1,212 @@
+import React, { useEffect, useState } from 'react';
+import { AttendanceRecord } from '../types';
+import { storageService } from '../services/storageService';
+import { analyzeAttendance } from '../services/geminiService';
+import { Download, FileText, Search, Sparkles, AlertTriangle, CheckCircle, Clock, CalendarDays } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
+export const Report: React.FC = () => {
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
+  const [filteredRecords, setFilteredRecords] = useState<AttendanceRecord[]>([]);
+  const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+  const [aiAnalysis, setAiAnalysis] = useState<string>("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  useEffect(() => {
+    const allRecords = storageService.getRecords();
+    allRecords.sort((a, b) => new Date(b.checkIn).getTime() - new Date(a.checkIn).getTime());
+    setRecords(allRecords);
+  }, []);
+
+  useEffect(() => {
+    const filtered = records.filter(r => r.date.startsWith(filterMonth));
+    setFilteredRecords(filtered);
+    setAiAnalysis(""); 
+  }, [records, filterMonth]);
+
+  const handleAnalysis = async () => {
+    setIsAnalyzing(true);
+    const analysis = await analyzeAttendance(filteredRecords);
+    setAiAnalysis(analysis);
+    setIsAnalyzing(false);
+  };
+
+  const getStatusBadge = (record: AttendanceRecord) => {
+    if (!record.checkOut) {
+        return (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span> Working
+            </span>
+        );
+    }
+    if (record.isLate) {
+        return (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-red-50 text-red-700 border border-red-100">
+                <Clock size={12} /> Late
+            </span>
+        );
+    }
+    if (record.isEarlyLeave) {
+        return (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-orange-50 text-orange-700 border border-orange-100">
+                <AlertTriangle size={12} /> Early Out
+            </span>
+        );
+    }
+    return (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-100">
+            <CheckCircle size={12} /> On Time
+        </span>
+    );
+  };
+
+  const getStatusLabel = (record: AttendanceRecord) => {
+    if (!record.checkOut) return "Working";
+    if (record.isLate) return "Late";
+    if (record.isEarlyLeave) return "Early Out";
+    return "On Time";
+  };
+
+  const exportToExcel = () => {
+    const ws = XLSX.utils.json_to_sheet(filteredRecords.map(r => ({
+      Date: r.date,
+      CheckIn: new Date(r.checkIn).toLocaleTimeString(),
+      CheckOut: r.checkOut ? new Date(r.checkOut).toLocaleTimeString() : 'N/A',
+      Duration: (r.workDurationMinutes / 60).toFixed(2) + ' hrs',
+      Status: getStatusLabel(r)
+    })));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Attendance");
+    XLSX.writeFile(wb, `attendance_${filterMonth}.xlsx`);
+  };
+
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    doc.text(`Attendance Report - ${filterMonth}`, 14, 22);
+    
+    const tableData = filteredRecords.map(r => [
+      r.date,
+      new Date(r.checkIn).toLocaleTimeString(),
+      r.checkOut ? new Date(r.checkOut).toLocaleTimeString() : 'N/A',
+      (r.workDurationMinutes / 60).toFixed(2) + ' hrs',
+      getStatusLabel(r)
+    ]);
+
+    autoTable(doc, {
+      head: [['Date', 'Check In', 'Check Out', 'Duration', 'Status']],
+      body: tableData,
+      startY: 30,
+      theme: 'grid',
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [79, 70, 229] }
+    });
+
+    doc.save(`attendance_${filterMonth}.pdf`);
+  };
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      {/* Header & Actions */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 pb-6 border-b border-slate-200">
+        <div>
+          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Analytics & Reports</h2>
+          <p className="text-slate-500 mt-1">Detailed breakdown of attendance metrics.</p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+            <button onClick={exportToExcel} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-all text-sm font-semibold shadow-sm">
+                <FileText size={16} className="text-emerald-600" /> Export Excel
+            </button>
+            <button onClick={exportToPDF} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-all text-sm font-semibold shadow-sm">
+                <Download size={16} className="text-red-600" /> Export PDF
+            </button>
+        </div>
+      </div>
+
+      {/* Control Bar */}
+      <div className="bg-white p-5 rounded-xl shadow-[0_2px_12px_-4px_rgba(0,0,0,0.05)] border border-slate-200 flex flex-col md:flex-row gap-4 justify-between items-center">
+         <div className="flex items-center gap-3 w-full md:w-auto relative group">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                <CalendarDays size={18} />
+            </div>
+            <input 
+              type="month" 
+              value={filterMonth} 
+              onChange={(e) => setFilterMonth(e.target.value)}
+              className="pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all w-full md:w-64 font-medium"
+            />
+         </div>
+         <button 
+           onClick={handleAnalysis}
+           disabled={isAnalyzing}
+           className="flex items-center gap-2 px-5 py-2.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg text-sm font-semibold disabled:opacity-50 transition-colors w-full md:w-auto justify-center"
+         >
+           <Sparkles size={16} />
+           {isAnalyzing ? "Analyzing..." : "Generate AI Insights"}
+         </button>
+      </div>
+
+      {aiAnalysis && (
+        <div className="bg-gradient-to-br from-indigo-50 to-white border border-indigo-100 p-6 rounded-xl text-indigo-900 text-sm flex gap-4 shadow-sm animate-in fade-in slide-in-from-top-2">
+           <div className="p-2 bg-white rounded-lg shadow-sm h-fit shrink-0 text-indigo-600">
+             <Sparkles size={20} />
+           </div>
+           <div>
+             <h4 className="font-bold text-indigo-950 mb-1">AI Performance Summary</h4>
+             <p className="leading-relaxed text-indigo-800">{aiAnalysis}</p>
+           </div>
+        </div>
+      )}
+
+      {/* Data Table */}
+      <div className="bg-white rounded-xl shadow-[0_2px_12px_-4px_rgba(0,0,0,0.05)] border border-slate-200 overflow-hidden">
+        <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                    <th className="px-6 py-4 font-semibold text-slate-500 uppercase tracking-wider text-xs">Date</th>
+                    <th className="px-6 py-4 font-semibold text-slate-500 uppercase tracking-wider text-xs">Check In</th>
+                    <th className="px-6 py-4 font-semibold text-slate-500 uppercase tracking-wider text-xs">Check Out</th>
+                    <th className="px-6 py-4 font-semibold text-slate-500 uppercase tracking-wider text-xs">Work Hours</th>
+                    <th className="px-6 py-4 font-semibold text-slate-500 uppercase tracking-wider text-xs">Status</th>
+                </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+                {filteredRecords.length === 0 ? (
+                    <tr>
+                        <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
+                            <div className="flex flex-col items-center gap-2">
+                                <Search size={32} className="opacity-20" />
+                                <p>No attendance records found for this period.</p>
+                            </div>
+                        </td>
+                    </tr>
+                ) : (
+                    filteredRecords.map((record) => (
+                        <tr key={record.id} className="hover:bg-slate-50/80 transition-colors group">
+                            <td className="px-6 py-4 font-medium text-slate-800 group-hover:text-indigo-900">{record.date}</td>
+                            <td className="px-6 py-4 text-slate-600 font-mono text-xs">{new Date(record.checkIn).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</td>
+                            <td className="px-6 py-4 text-slate-500 font-mono text-xs">
+                                {record.checkOut 
+                                ? new Date(record.checkOut).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) 
+                                : <span className="text-slate-300">-</span>}
+                            </td>
+                            <td className="px-6 py-4 font-mono text-xs text-slate-600">
+                                {record.workDurationMinutes > 0 
+                                ? <span className="font-semibold">{Math.floor(record.workDurationMinutes / 60)}h {record.workDurationMinutes % 60}m</span> 
+                                : '-'}
+                            </td>
+                            <td className="px-6 py-4">
+                                {getStatusBadge(record)}
+                            </td>
+                        </tr>
+                    ))
+                )}
+            </tbody>
+            </table>
+        </div>
+      </div>
+    </div>
+  );
+};

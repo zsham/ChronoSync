@@ -1,0 +1,7 @@
+{
+  "name": "ChronoSync - Professional Time Attendance",
+  "description": "A comprehensive time tracking solution for modern professionals featuring geolocation verification, smart reporting, and AI-driven productivity insights.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
